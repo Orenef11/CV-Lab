@@ -1,3 +1,4 @@
+# coding=utf-8
 # /usr/bin/env python
 import cv2
 from math import sqrt
@@ -6,7 +7,7 @@ import numpy as np
 
 """ Important variables for identifying vehicles in video!"""
 ''' The minimum area of vehicle'''
-MIN_AREA_SIZE = 400
+MIN_AREA_SIZE = 200
 ''' Aspect ratio is the proportion between the width and the height of a picture '''
 MIN_ASPECT_RATIO = 0.2
 MAX_ASPECT_RATIO = 4.0
@@ -53,7 +54,7 @@ class Blob(object):
         kalman.statePost = np.array([[self._centroids_positions[0][0]], [self._centroids_positions[0][1]], [0], [5]],
                                     np.float32)
         self._kalman_position = kalman
-        self.predicted_next_position = None
+        self.__predicted_next_position = None
         self.predict()
 
     def checking_that_vehicles(self):
@@ -68,7 +69,7 @@ class Blob(object):
     """ Predict the next step, as the Kalman algorithm """
     def predict(self):
         prediction = self._kalman_position.predict()
-        self.predicted_next_position = prediction[0][0], prediction[1][0]
+        self.__predicted_next_position = prediction[0][0], prediction[1][0]
 
     def update(self, vehicle):
         # self._contour = vehicle.contour
@@ -113,15 +114,18 @@ class Blob(object):
     def id(self):
         return self._id
 
+    @property
+    def predicted_next_position(self):
+        return self.__predicted_next_position
+
     """ For debug, print all the parameters of the object. Created for QA and debug """
-    def to_string(self):
-        print("contour - ", self.contour)
-        print("bounding_rect - ", self.bounding_rect)
-        print("center_positions - ", self.center_positions)
-        print("diagonal_size - ", self.diagonal_size)
-        print("aspect_ratio - ", self.aspect_ratio)
-        print("rect_area - ", self.rect_area)
-        print("still_being_tracked - ", self.still_being_tracked)
-        print("current_match_found_or_new_Vehicle - ", self.current_match_found_or_new_Vehicle)
-        print("num_of_consecutive_frames_without_a_match - ", self.num_of_consecutive_frames_without_a_match)
-        print("predicted_next_position - ", self.predicted_next_position)
+    def __str__(self):
+        to_string = ''
+        to_string += "contour - {}\n".format(self._contour)
+        to_string += "bounding_rect - {}, ".format(self._bounding_rect)
+        to_string += "center_positions - {}, ".format(self._centroids_positions)
+        to_string += "diagonal_size - {}, ".format(self._diagonal_size)
+        to_string += "aspect_ratio - {}, ".format(self._aspect_ratio)
+        to_string += "rect_area - {}\n".format(self._rect_area)
+        to_string += "predicted_next_position - {}\n".format(self.__predicted_next_position)
+        return to_string

@@ -1,3 +1,4 @@
+# coding=utf-8
 # /usr/bin/env python
 """
 ==================================================================================================================
@@ -19,6 +20,7 @@ import cv2
 import numpy as np
 from scipy.spatial.distance import euclidean
 from copy import copy
+from pickle import load, dump
 
 """ Color codes I use them a lot """
 WHITE_COLOR = (255, 255, 255)
@@ -30,6 +32,8 @@ MY_PYTHON_VERSION = r"2.7.11 Or 3.5.2 anaconda's version"
 MY_CV_VERSION = r"3.1.0"
 
 THRESHOLD = 30
+DEBUG_MODE = True
+MIN_DISTANCE = 1000
 
 
 def draw_and_show_contours(image_shape, contours_list, window_name):
@@ -40,34 +44,34 @@ def draw_and_show_contours(image_shape, contours_list, window_name):
 
 def update_vehicle_by_frame(all_blobs_list, current_frame_blobs_list):
     new_all_blobs_list = []
-    for idx in range(all_blobs_list.__len__()):
-        all_blobs_list[idx].predict()
-
-    for frame_blob in current_frame_blobs_list:
+    for current_frame_blob in current_frame_blobs_list:
         index_of_minimum_distance = 0
-        minimum_distance = 10000000000
+        minimum_distance = MIN_DISTANCE
         for idx, vehicle in enumerate(all_blobs_list):
-            # if vehicle.still_being_tracked is True:
-            distance = euclidean(frame_blob.centroids_positions[-1], vehicle.predicted_next_position)
+            x = current_frame_blob.centroids_positions[-1]
+            if x[0] == 419 and x[1] == 424:
+                if idx == 2:
+                    print()
+
+            distance = euclidean(current_frame_blob.centroids_positions[-1], vehicle.centroids_positions[-1])
             if distance < minimum_distance:
                 minimum_distance = distance
                 index_of_minimum_distance = idx
 
-        if minimum_distance < frame_blob.diagonal_size * 0.5:
-            all_blobs_list[index_of_minimum_distance].update(frame_blob)
+        if float(minimum_distance) < current_frame_blob.diagonal_size * 0.5:
+            all_blobs_list[index_of_minimum_distance].update(current_frame_blob)
             new_all_blobs_list.append(all_blobs_list[index_of_minimum_distance])
         else:
-            frame_blob.current_match_found_or_new_blob = True
-            new_all_blobs_list.append(frame_blob)
+            new_all_blobs_list.append(current_frame_blob)
 
-
+    if len(current_frame_blobs_list) == 0:
+        return all_blobs_list
     del all_blobs_list
-    return new_all_blobs_list
     return new_all_blobs_list
 
 
 def draw_blob_info_on_image(all_blobs_list, frame):
-    for vehicle in all_blobs_list:
+    for vehicle_idx, vehicle in enumerate(all_blobs_list):
         # if vehicle.still_being_tracked is True:
         x, y, w, h = vehicle.bounding_rect
         cv2.rectangle(frame, (x, y), (x + w, y + h), vehicle.color, 2)
@@ -75,7 +79,11 @@ def draw_blob_info_on_image(all_blobs_list, frame):
         cv2.circle(frame, car_center, 1, RED_COLOR, 2)
         font_face = cv2.FONT_HERSHEY_SIMPLEX
 
-        # cv2.putText(frame, str(vehicle.id), car_center, font_face, 1, GREEN_COLOR, 2)
+        if DEBUG_MODE:
+            car_id = str(vehicle_idx)
+        else:
+            car_id = str(vehicle.id)
+        cv2.putText(frame, car_id, car_center, font_face, 1, GREEN_COLOR, 2)
 
 
 def check_blob_crossed(all_blob_list, horizontal_line_position, cars_count, direction):
@@ -111,7 +119,16 @@ def main():
     print(__doc__)
 
     """ Get arguments from command-line"""
-    args = argument_parser()
+    if DEBUG_MODE:
+        with open('args.pickle', 'rb') as f:
+            args = load(f)
+        args.direction = 1
+        args.speed = 1
+        args.video_path = 'dataset1/2.mp4'
+        args.video_path = 'dataset1/videoplayback.mp4'
+
+    else:
+        args = argument_parser()
 
     """ Check if arguments are valid """
     vehicle_direction, car_speed = check_valid_arguments(args)
@@ -140,7 +157,7 @@ def main():
         img_frame2_copy = cv2.cvtColor(img_frame2_copy, cv2.COLOR_BGR2GRAY)
 
         img_frame1_copy = cv2.GaussianBlur(img_frame1_copy, (5, 5), 0)
-        img_frame2_copy = cv2.GaussianBlur(img_frame2_copy, (5, 5), 0, )
+        img_frame2_copy = cv2.GaussianBlur(img_frame2_copy, (5, 5), 0)
 
         img_difference = cv2.absdiff(img_frame1_copy, img_frame2_copy)
 
@@ -174,19 +191,16 @@ def main():
         blobs_contours_list = [blob.contour for blob in current_frame_blobs_list]
         draw_and_show_contours(img_thresh.shape, blobs_contours_list, "Current Frame Blobs")
 
-        if first_loop_flag is True:
+        if first_loop_flag is False:
+            blobs_list = update_vehicle_by_frame(blobs_list, current_frame_blobs_list)
+        else:
             blobs_list = list(current_frame_blobs_list)
             first_loop_flag = False
-        else:
-            blobs_list = update_vehicle_by_frame(blobs_list, current_frame_blobs_list)
 
         blobs_contours_list = [blob.contour for blob in blobs_list]
         draw_and_show_contours(img_thresh.shape, blobs_contours_list, "All Blobs")
-
         img_frame2_copy = copy(img_frame2)
-
         draw_blob_info_on_image(blobs_list, img_frame2_copy)
-
         least_one_blob_crosses_the_line, car_count = \
             check_blob_crossed(blobs_list, horizontal_line_position, car_count, vehicle_direction)
 
@@ -210,13 +224,10 @@ def main():
                 if k == ord('p') or k == ord('P'):
                     break
                 if k == 27 or k == ord('q') or k == ord('Q'):
-                    capture_video.release()
-                    cv2.destroyAllWindows()
                     stop_loop = True
+                    break
         if k == 27 or k == ord('q') or k == ord('Q'):
-            capture_video.release()
-            cv2.destroyAllWindows()
-            stop_loop = True
+            break
 
     print(car_count)
     capture_video.release()
