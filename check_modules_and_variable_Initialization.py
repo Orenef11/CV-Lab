@@ -2,7 +2,7 @@
 from sys import version
 from argparse import ArgumentParser
 import cv2
-from os.path import isfile
+from os import path, getcwd
 
 """ CV & Python version by which the code is written """
 MY_PYTHON_VERSION = r"2.7.11 Or 3.5.2 anaconda's version"
@@ -39,21 +39,22 @@ def create_and_initialization_of_variables(args):
 
     cv_major_ver = int(cv2.__version__.split('.')[0])
     if cv_major_ver == 3:
-        width = capture_video.get(cv2.CAP_PROP_FPS)  # float
+        width = capture_video.get(cv2.CAP_PROP_FRAME_WIDTH)  # float
         height = capture_video.get(cv2.CAP_PROP_FRAME_HEIGHT)  # float
         fps = capture_video.get(cv2.CAP_PROP_FPS)
-        fourcc = cv2.VideoWriter_fourcc(*'MPG4')
+        fourcc = cv2.VideoWriter_fourcc(*'DIVX')
 
     else:
-        width = capture_video.get(cv2.cv.CV_CAP_PROP_FPS)  # .cv.CV_CAP_PROP_FRAME_WIDTH)  # float
+        width = capture_video.get(cv2.cv.CAP_PROP_FRAME_WIDTH)  # .cv.CV_CAP_PROP_FRAME_WIDTH)  # float
         height = capture_video.get(cv2.cv.CV_CAP_PROP_FRAME_HEIGHT)  # .cv.CV_CAP_PROP_FRAME_HEIGHT)  # float
         fps = capture_video.get(cv2.cv.CV_CAP_PROP_FPS)
-        fourcc = cv2.cv.CV_FOURCC(*'MPG4')
+        fourcc = cv2.cv.CV_FOURCC(*'DIVX')
 
     fourcc, width, height, fps = (int(fourcc), int(width), int(height), int(fps))
-    video_output = cv2.VideoWriter("output-1.mp4", fourcc, fps, (width, height))
+    video_output = cv2.VideoWriter(path.join('Output', 'output-' + path.split(args.video_path)[1]), fourcc,
+                                   fps, (width, height))
     _, img_frame1 = capture_video.read()
-    video_output.write(img_frame1)
+
     blobs_list = []
     crossing_line = []
     car_count = 0
@@ -147,7 +148,7 @@ def check_valid_arguments(args):
         exit("Direction error: Entered value does not match the requirements")
     if 0 >= args.speed or args.speed > 100:
         exit("Speed error: Entered value does not match the requirements")
-    if not isfile(args.video_path):
+    if not path.isfile(args.video_path):
         exit("Video error: The path of video not correct")
 
     return args.direction, args.speed
