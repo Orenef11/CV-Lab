@@ -16,6 +16,8 @@ MIN_WIDTH = 30
 MIX_HEIGHT = 30
 MIN_DIAGONAL = 60.0
 RATIO_AREA = 0.5
+''' A counter of the amount of cars a class blob sets '''
+car_idx = 1
 
 
 def color_random_lottery():
@@ -26,15 +28,12 @@ def color_random_lottery():
     return red_color, green_color, blue_color
 
 
-car_idx = 1
 class Blob(object):
     """ Class which identifies the vehicles (cars and also motorcycles)
     In addition, with the functions that we eliminate noises and objects that not vehicles! """
 
     def __init__(self, contour):
-        global car_idx
-        self._id = car_idx
-        car_idx += 1
+        self._id = -1
         self._contour = contour
         x, y, w, h = cv2.boundingRect(contour)
         self._bounding_rect = cv2.boundingRect(contour)
@@ -43,6 +42,7 @@ class Blob(object):
         self._aspect_ratio = w / float(h)
         self._rect_area = float(w * h)
         self._color = color_random_lottery()
+        self._cross_line = False
 
         """ Variable kalman algorithm """
         kalman = cv2.KalmanFilter(4, 2)
@@ -80,6 +80,10 @@ class Blob(object):
         # self._rect_area = vehicle.rect_area
         self._kalman_position.correct(np.array([[vehicle.centroids_positions[-1][0]],
                                                 [vehicle.centroids_positions[-1][0]]], np.float32))
+        if self._id == -1 and len(self._centroids_positions) > 4:
+            global car_idx
+            self._id = car_idx
+            car_idx += 1
         self.predict()
 
     @property
@@ -118,6 +122,13 @@ class Blob(object):
     def predicted_next_position(self):
         return self.__predicted_next_position
 
+    @property
+    def cross_line(self):
+        return self._cross_line
+
+    @cross_line.setter
+    def cross_line(self, value):
+        self._cross_line = value
     """ For debug, print all the parameters of the object. Created for QA and debug """
     def __str__(self):
         to_string = ''

@@ -21,6 +21,9 @@ import numpy as np
 from scipy.spatial.distance import euclidean
 from copy import copy
 from pickle import load, dump
+from os import path, makedirs, remove
+from traceback import print_exc
+
 
 """ Color codes I use them a lot """
 WHITE_COLOR = (255, 255, 255)
@@ -32,7 +35,7 @@ MY_PYTHON_VERSION = r"2.7.11 Or 3.5.2 anaconda's version"
 MY_CV_VERSION = r"3.1.0"
 
 THRESHOLD = 30
-DEBUG_MODE = True
+DEBUG_MODE = False
 MIN_DISTANCE = 1000
 
 
@@ -90,8 +93,8 @@ def check_blob_crossed(all_blob_list, horizontal_line_position, cars_count, dire
     least_one_blob_crossed_the_line = False
 
     for blob in all_blob_list:
-        index = blob.centroids_positions.__len__()
-        if index >= 2: #blob.still_being_tracked is True and index >= 2:
+        index = len(blob.centroids_positions)
+        if not blob.cross_line and index >= 4:
             prev_frame_index = index - 2
             current_frame_index = index - 1
 
@@ -99,10 +102,12 @@ def check_blob_crossed(all_blob_list, horizontal_line_position, cars_count, dire
                     blob.centroids_positions[current_frame_index][1] and direction == 0:
                 cars_count += 1
                 least_one_blob_crossed_the_line = True
+                blob.cross_line = True
             elif blob.centroids_positions[prev_frame_index][1] < horizontal_line_position <= \
                     blob.centroids_positions[current_frame_index][1] and direction == 1:
                 cars_count += 1
                 least_one_blob_crossed_the_line = True
+                blob.cross_line = True
 
     return least_one_blob_crossed_the_line, cars_count
 
@@ -118,17 +123,22 @@ def main():
     """ Print the doc on this project """
     print(__doc__)
 
+    # Create the 'Output' folder
+    if not path.isdir('Output'):
+        makedirs('Output')
+
     """ Get arguments from command-line"""
     if DEBUG_MODE:
         with open('args.pickle', 'rb') as f:
             args = load(f)
         args.direction = 1
         args.speed = 1
-        args.video_path = 'dataset1/2.mp4'
-        args.video_path = 'dataset1/videoplayback.mp4'
+        args.video_path = 'dataset/Highway1.avi'
 
     else:
         args = argument_parser()
+        with open('args.pickle', 'wb') as fp:
+            dump(args, fp)
 
     """ Check if arguments are valid """
     vehicle_direction, car_speed = check_valid_arguments(args)
@@ -143,91 +153,99 @@ def main():
     first_loop_flag = True
     stop_loop = False
     digit_cv_version = cv2.__version__.split(".")[0]
-    while capture_video.isOpened() and not stop_loop:
-        end_of_video, img_frame2 = capture_video.read()
-        if end_of_video is False:
-            exit("End of video")
+    img_idx = 1
+    # images_temp_folder_path = path.join('Output', path.split(args.video_path)[0])
+    try:
+        while capture_video.isOpened() and not stop_loop:
+            end_of_video, img_frame2 = capture_video.read()
+            if end_of_video is False:
+                break
 
-        current_frame_blobs_list = []
-        img_frame1_copy = copy(img_frame1)
-        img_frame2_copy = copy(img_frame2)
+            current_frame_blobs_list = []
+            img_frame1_copy = copy(img_frame1)
+            img_frame2_copy = copy(img_frame2)
 
-        """ Change the frame to Gray color """
-        img_frame1_copy = cv2.cvtColor(img_frame1_copy, cv2.COLOR_BGR2GRAY)
-        img_frame2_copy = cv2.cvtColor(img_frame2_copy, cv2.COLOR_BGR2GRAY)
+            """ Change the frame to Gray color """
+            img_frame1_copy = cv2.cvtColor(img_frame1_copy, cv2.COLOR_BGR2GRAY)
+            img_frame2_copy = cv2.cvtColor(img_frame2_copy, cv2.COLOR_BGR2GRAY)
 
-        img_frame1_copy = cv2.GaussianBlur(img_frame1_copy, (5, 5), 0)
-        img_frame2_copy = cv2.GaussianBlur(img_frame2_copy, (5, 5), 0)
+            img_frame1_copy = cv2.GaussianBlur(img_frame1_copy, (5, 5), 0)
+            img_frame2_copy = cv2.GaussianBlur(img_frame2_copy, (5, 5), 0)
 
-        img_difference = cv2.absdiff(img_frame1_copy, img_frame2_copy)
+            img_difference = cv2.absdiff(img_frame1_copy, img_frame2_copy)
 
-        _, img_thresh = cv2.threshold(img_difference, THRESHOLD, 255, cv2.THRESH_BINARY)
-        cv2.imshow("Threshold", img_thresh)
+            _, img_thresh = cv2.threshold(img_difference, THRESHOLD, 255, cv2.THRESH_BINARY)
+            cv2.imshow("Threshold", img_thresh)
 
-        structuring_elements5x5 = cv2.getStructuringElement(cv2.MORPH_RECT, (5, 5), (-1, -1))
-        for i in range(2):
-            img_thresh = cv2.dilate(img_thresh, structuring_elements5x5, None, (-1, -1), 1, cv2.BORDER_DEFAULT,
-                                    (0, 0, 0))
-            img_thresh = cv2.dilate(img_thresh, structuring_elements5x5, None, (-1, -1), 1, cv2.BORDER_DEFAULT,
-                                    (0, 0, 0))
-            img_thresh = cv2.erode(img_thresh, structuring_elements5x5, None, (-1, -1), 1, cv2.BORDER_DEFAULT,
-                                   (0, 0, 0))
+            structuring_elements5x5 = cv2.getStructuringElement(cv2.MORPH_RECT, (5, 5), (-1, -1))
+            for i in range(2):
+                img_thresh = cv2.dilate(img_thresh, structuring_elements5x5, None, (-1, -1), 1, cv2.BORDER_DEFAULT,
+                                        (0, 0, 0))
+                img_thresh = cv2.dilate(img_thresh, structuring_elements5x5, None, (-1, -1), 1, cv2.BORDER_DEFAULT,
+                                        (0, 0, 0))
+                img_thresh = cv2.erode(img_thresh, structuring_elements5x5, None, (-1, -1), 1, cv2.BORDER_DEFAULT,
+                                       (0, 0, 0))
 
-        img_thresh_copy = copy(img_thresh)
-        if digit_cv_version == "3":
-            _, contours, _ = cv2.findContours(img_thresh_copy, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-        elif digit_cv_version == "2":
-            contours, _ = cv2.findContours(img_thresh_copy, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            img_thresh_copy = copy(img_thresh)
+            if digit_cv_version == "3":
+                _, contours, _ = cv2.findContours(img_thresh_copy, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            elif digit_cv_version == "2":
+                contours, _ = cv2.findContours(img_thresh_copy, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
-        draw_and_show_contours(img_thresh.shape, contours, "Contours")
-        convex_hulls_list = [cv2.convexHull(contours[i]) for i in range(contours.__len__())]
-        draw_and_show_contours(img_thresh.shape, convex_hulls_list, "Convex Hulls")
+            draw_and_show_contours(img_thresh.shape, contours, "Contours")
+            convex_hulls_list = [cv2.convexHull(contours[i]) for i in range(contours.__len__())]
+            draw_and_show_contours(img_thresh.shape, convex_hulls_list, "Convex Hulls")
 
-        for i in range(convex_hulls_list.__len__()):
-            blobs = Blob(convex_hulls_list[i])
-            if blobs.checking_that_vehicles() is True:
-                current_frame_blobs_list.append(blobs)
+            for i in range(convex_hulls_list.__len__()):
+                blobs = Blob(convex_hulls_list[i])
+                if blobs.checking_that_vehicles() is True:
+                    current_frame_blobs_list.append(blobs)
 
-        blobs_contours_list = [blob.contour for blob in current_frame_blobs_list]
-        draw_and_show_contours(img_thresh.shape, blobs_contours_list, "Current Frame Blobs")
+            blobs_contours_list = [blob.contour for blob in current_frame_blobs_list]
+            draw_and_show_contours(img_thresh.shape, blobs_contours_list, "Current Frame Blobs")
 
-        if first_loop_flag is False:
-            blobs_list = update_vehicle_by_frame(blobs_list, current_frame_blobs_list)
-        else:
-            blobs_list = list(current_frame_blobs_list)
-            first_loop_flag = False
+            if first_loop_flag is False:
+                blobs_list = update_vehicle_by_frame(blobs_list, current_frame_blobs_list)
+            else:
+                blobs_list = list(current_frame_blobs_list)
+                first_loop_flag = False
 
-        blobs_contours_list = [blob.contour for blob in blobs_list]
-        draw_and_show_contours(img_thresh.shape, blobs_contours_list, "All Blobs")
-        img_frame2_copy = copy(img_frame2)
-        draw_blob_info_on_image(blobs_list, img_frame2_copy)
-        least_one_blob_crosses_the_line, car_count = \
-            check_blob_crossed(blobs_list, horizontal_line_position, car_count, vehicle_direction)
+            img_frame2_copy = copy(img_frame2)
+            draw_blob_info_on_image(blobs_list, img_frame2_copy)
+            least_one_blob_crosses_the_line, car_count = \
+                check_blob_crossed(blobs_list, horizontal_line_position, car_count, vehicle_direction)
 
-        if least_one_blob_crosses_the_line is True:
-            cv2.line(img_frame2_copy, crossing_line[0], crossing_line[1], GREEN_COLOR, 2)
-        else:
-            cv2.line(img_frame2_copy, crossing_line[0], crossing_line[1], RED_COLOR, 2)
+            if least_one_blob_crosses_the_line is True:
+                cv2.line(img_frame2_copy, crossing_line[0], crossing_line[1], GREEN_COLOR, 2)
+            else:
+                cv2.line(img_frame2_copy, crossing_line[0], crossing_line[1], RED_COLOR, 2)
 
-        draw_cars_count_on_image(car_count, img_frame2_copy)
-        cv2.imshow("Real Frame", img_frame2_copy)
-        img_frame1 = copy(img_frame2)
-        video_output.write(img_frame2_copy)
-        del current_frame_blobs_list
-        """ Do not delete this loop !!!
-            It is important to run the capture of the frame """
-        k = 0xFF & cv2.waitKey(car_speed)
-        if k == ord('p') or k == ord('P'):
-            while 1:
-                k = 0xFF & cv2.waitKey(1)
+            draw_cars_count_on_image(car_count, img_frame2_copy)
+            cv2.imshow("Real Frame", img_frame2_copy)
+            # Creates the color output video with vehicle identification
+            cv2.imwrite('temp.jpg', img_frame2_copy, [cv2.IMWRITE_JPEG_QUALITY, 90])
+            video_output.write(cv2.imread('temp.jpg'))
+            remove('temp.jpg')
+            img_idx += 1
+            img_frame1 = copy(img_frame2)
+            del current_frame_blobs_list
+            """ Do not delete this loop !!!
+                It is important to run the capture of the frame """
+            k = 0xFF & cv2.waitKey(car_speed)
+            if k == ord('p') or k == ord('P'):
+                while 1:
+                    k = 0xFF & cv2.waitKey(1)
 
-                if k == ord('p') or k == ord('P'):
-                    break
-                if k == 27 or k == ord('q') or k == ord('Q'):
-                    stop_loop = True
-                    break
-        if k == 27 or k == ord('q') or k == ord('Q'):
-            break
+                    if k == ord('p') or k == ord('P'):
+                        break
+                    if k == 27 or k == ord('q') or k == ord('Q'):
+                        stop_loop = True
+                        break
+            if k == 27 or k == ord('q') or k == ord('Q'):
+                break
+    except Exception as e:
+        print(e)
+        print(print_exc)
 
     print(car_count)
     capture_video.release()
